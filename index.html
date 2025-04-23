@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Colorful Task Manager</title>
+    <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.7/main.min.css' rel='stylesheet' />
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.7/main.min.js'></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        .normal {
+            color: #00ffff;
+        }
+        .warning {
+            color: #ffcc00;
+            font-weight: bold;
+        }
+        .danger {
+            color: #ff4c4c;
+            font-weight: bold;
+        }
+        li:hover {
+            transform: scale(1.03);
+            transition: all 0.3s ease;
+            background: linear-gradient(to right, #ffffff, #e6f7ff);
+        }
+        .dark-mode {
+            background-color: #121212;
+            color: #f5f5f5;
+        }
+        .dark-mode li {
+            background-color: #1e1e1e;
+        }
+        .dark-mode input,
+        .dark-mode .btn,
+        .dark-mode .form-control {
+            background-color: #333;
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-primary">
+    <div class="container py-5">
+        <h1 class="text-white text-center mb-4">Task Manager</h1>
+        
+        <div class="text-white mb-2">
+            <label class="form-check-label text-white me-2" for="darkToggle">Dark Mode</label>
+            <input class="form-check-input" type="checkbox" id="darkToggle">
+        </div>
+
+        <div class="mb-4">
+            <input id="url" type="text" class="form-control mb-2" placeholder="Task name" />
+            <input id="priority" type="number" class="form-control mb-2" placeholder="Priority (1-100)" />
+            <input id="endDate" type="date" class="form-control mb-2" />
+            <button onclick="saveUrl()" class="btn btn-light">Add Task</button>
+        </div>
+
+        <ul id="list" class="list-group"></ul>
+
+        <div id="calendar" class="my-3"></div>
+    </div>
+
+    <script>
+        var firebaseConfig = {
+            apiKey: "AIzaSyA-HSKnrvnHVBl3FcU7VsnUvNHqxgV6yJ4",
+            authDomain: "reminder-5cfae.firebaseapp.com",
+            databaseURL: "https://reminder-5cfae-default-rtdb.firebaseio.com",
+            projectId: "reminder-5cfae",
+            storageBucket: "reminder-5cfae.appspot.com",
+            messagingSenderId: "184467674203",
+            appId: "1:184467674203:web:a4f807aa33b5f2ce1d27fc"
+        };
+        firebase.initializeApp(firebaseConfig);
+        var database = firebase.database();
+
+        function saveUrl() {
+            var url = document.getElementById("url").value;
+            var priority = parseInt(document.getElementById("priority").value);
+            var endDate = document.getElementById("endDate").value;
+            var id = Date.now().toString();
+
+            database.ref("urls/" + id).set({
+                url: url,
+                id: id,
+                priority: priority,
+                completed: false,
+                endDate: endDate
+            });
+
+            document.getElementById("url").value = "";
+            document.getElementById("priority").value = "";
+            document.getElementById("endDate").value = "";
+        }
+
+        function getGas() {
+            var gas = localStorage.getItem("gas");
+            if (!gas) {
+                gas = prompt("What is your name?");
+                localStorage.setItem("gas", gas);
+            }
+            return gas;
+        }
+
+        function loadUrl() {
+            var gas = getGas();
+            var listElement = document.getElementById("list");
+            listElement.innerHTML = "";
+
+            database.ref("urls").once("value", function(snapshot) {
+                var listOfUrls = [];
+                snapshot.forEach(function(childSnapshot) {
+                    var item = childSnapshot.val();
+                    if (item.url.includes(gas)) {
+                        listOfUrls.push(item);
+                    }
+                });
+
+                listOfUrls.sort((a, b) => b.priority - a.priority);
+
+                listOfUrls.forEach(function(item) {
+                    var li = document.createElement("li");
+                    var className = "normal";
+                    if (item.priority > 60) className = "warning";
+                    if (item.priority > 90) className = "danger";
+                    if (item.completed) className += " text-decoration-line-through";
+
+                    li.className = `list-group-item d-flex justify-content-between align-items-center ${className}`;
+                    li.textContent = replaceVariable(item.url);
+
+                    var btn = document.createElement("button");
+                    btn.className = "btn btn-sm btn-outline-success";
+                    btn.textContent = "Done";
+                    btn.onclick = function() {
+                        database.ref("urls/" + item.id).update({ completed: true });
+                        loadUrl();
+                    };
+
+                    li.appendChild(btn);
+                    listElement.appendChild(li);
+                });
+
+                renderCalendar(listOfUrls.filter(x => x.endDate && x.endDate !== ''));
+            });
+        }
+
+        function replaceVariable(text) {
+            var gas = getGas();
+            return text.replace("{gas}", gas);
+        }
+
+        function renderCalendar(tasks) {
+            const calendarEl = document.getElementById('calendar');
+            const calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                height: 500,
+                events: tasks.map(task => ({
+                    title: replaceVariable(task.url),
+                    date: new Date(task.endDate),
+                    color: task.completed ? '#28a745' : '#ffc107'
+                }))
+            });
+            calendar.render();
+        }
+
+        document.getElementById("darkToggle").addEventListener("change", function () {
+            document.body.classList.toggle("dark-mode");
+            localStorage.setItem("darkMode", this.checked);
+        });
+
+        if (localStorage.getItem("darkMode") === "true") {
+            document.body.classList.add("dark-mode");
+            document.getElementById("darkToggle").checked = true;
+        }
+
+        loadUrl();
+    </script>
+</body>
+</html>
